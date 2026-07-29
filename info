@@ -1,0 +1,46 @@
+201~200~The project is the major assessment item for this course, and is divided into a team-based project
+implementation in which students work in teams of 4–5 to build and evaluate a recommender
+system, and an individual report in which students outline the recommender system and summarize
+the results of the project, reflect on the whole process, and propose future directions for the work
+in the light of material presented in the lectures in the second half of the course.
+The project is expected to follow (and build on) an initial project design, and as such should
+focus on all aspects of building and evaluating a recommender system – the scope, dataset(s),
+method(s) and evaluation in the design (metrics and perhaps a small user study). Consider also
+the justification for your final design choices, such as why one particular style of recommender
+system is most suitable for the chosen scenario, or why one dataset is more useful than another.
+
+
+Implementation
+
+The project implementation should follow the style of the assignment and include the content
+outlined in the project design (possibly refined), now with experimental results for the different
+methods. Your team should include one (or more) Jupyter notebooks that show your reasoning
+process through the construction and evaluation of your recommendation models, including intermediate evaluations that went into the decision of the final recommender system proposal. Place
+auxiliary software modules in separate files, and do not submit the dataset(s).
+
+The mark for the project implementation is determined from a presentation held in Week 10, and
+is based on the sophistication of the recommender system, the thoroughness of the evaluation, the
+interpretation of the results, and the extent to which the project achieved its objectives.
+
+Each member of a team generally receives the same mark for the project implementation, however marks are moderated according to individual contributions determined
+using peer assessments: in “dysfunctional teams” where member contributions are
+highly unequal, marks will be adjusted to reflect the level of contribution. The Moodle
+Team Evaluation tool will be used for each team member to assess (anonymously) the relative
+contributions of the team members. Students are required to enter their peer assessments using
+the tool by 5:00 p.m. the day before the first project presentations. Once the due date has passed,
+these percentages cannot be modified.
+
+Presentation
+
+Each team will present a 20-minute summary of their project and findings at a time to be arranged
+in Week 10. The structure of the presentation should follow that of the results part of the report
+(see below) and cover the project scope, dataset(s), method(s) developed, and evaluations of the
+methods and proposed recommender system using historical data and/or any user evaluation,
+including the rationale for any design decisions. It is recognized that there may not be enough
+time for every detail to be included in the presentation, however additional information can be
+included in the report. Note that in constrast to the project pitch, your audience is mainly
+interested in results and outcomes. Leave time for audience questions.
+As the presentations form part of the assessment for the project, only the project team and markers
+will be present. Your presentation should be in PowerPoint or pdf, and include a description of
+the problem, sufficiently detailed experimental results, interpretations of the results, and final
+conclusions. Include a copy of your team presentation with your project submission.
