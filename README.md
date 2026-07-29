@@ -22,7 +22,7 @@ python scripts/check_setup.py
 Open [`notebooks/03_colab_full_run.ipynb`](notebooks/03_colab_full_run.ipynb) in Colab.
 
 1. Clone this repo
-2. Upload `kaggle.json` or set Kaggle env vars
+2. Set `KAGGLE_API_TOKEN` in Colab (Kaggle → Settings → API → Create New Token)
 3. Run all cells — dataset downloads via `kagglehub` (not committed to git)
 
 ## Kaggle dataset
