@@ -23,6 +23,13 @@ from src.recommend.stage3 import Stage3Recommender
 
 TAG_TO_INTENT = {tag: intent for intent, tag in MEAL_INTENT_TAGS.items()}
 
+ORACLE_EVAL_WEIGHTS: dict[str, dict[str, float]] = {
+    "pantry": {"cf": 0.0, "pantry": 1.0, "time": 0.0, "intent": 0.0},
+    "time": {"cf": 0.0, "pantry": 0.0, "time": 1.0, "intent": 0.0},
+    "intent": {"cf": 0.0, "pantry": 0.0, "time": 0.0, "intent": 1.0},
+    "full": {"cf": 0.25, "pantry": 0.35, "time": 0.20, "intent": 0.20},
+}
+
 
 @dataclass(slots=True)
 class EvalScenario:
@@ -46,7 +53,7 @@ def build_oracle_context(recipe_meta: dict, mode: str) -> SessionContext:
         return SessionContext()
 
     if mode == "pantry":
-        pantry = list(recipe_meta.get("ingredients") or [])[:5]
+        pantry = list(recipe_meta.get("ingredients") or [])
         return SessionContext(pantry=pantry)
     if mode == "time":
         minutes = recipe_meta.get("minutes")
@@ -60,7 +67,7 @@ def build_oracle_context(recipe_meta: dict, mode: str) -> SessionContext:
         intent = intent_from_recipe_tags(recipe_meta.get("tags") or [])
         minutes = recipe_meta.get("minutes")
         return SessionContext(
-            pantry=list(recipe_meta.get("ingredients") or [])[:5],
+            pantry=list(recipe_meta.get("ingredients") or []),
             max_minutes=int(minutes) if minutes is not None else None,
             meal_intent=intent,
         )
@@ -204,6 +211,7 @@ def evaluate_oracle_stage3(
             user_id=user_id,
             top_n=k,
             pin_recipe_ids=[target_recipe_id],
+            weights_override=ORACLE_EVAL_WEIGHTS.get(context_mode),
         )
         recommended = [rec.recipe_id for rec in recs]
 
@@ -236,6 +244,10 @@ def run_ablation(
     restrict_train_to_catalog: bool = True,
 ) -> pd.DataFrame:
     coverage = eval_catalog_coverage(recipes, held_out)
+    print(
+        f"Eval catalog coverage: {coverage['held_out_in_catalog']}/{coverage['held_out_rows']} "
+        f"held-out targets in catalog ({coverage['held_out_coverage_pct']}%)"
+    )
     if coverage["held_out_coverage_pct"] < 100.0:
         missing = int(coverage["held_out_rows"]) - int(coverage["held_out_in_catalog"])
         print(
