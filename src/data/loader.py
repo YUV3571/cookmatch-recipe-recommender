@@ -88,6 +88,35 @@ def load_interactions(
     return pd.read_csv(interactions_path, nrows=nrows)
 
 
+def build_eval_recipe_catalog(
+    recipes: pd.DataFrame,
+    train_interactions: pd.DataFrame,
+    held_out: pd.DataFrame,
+    max_recipes: int = 30_000,
+    random_seed: int = 42,
+) -> pd.DataFrame:
+    """Subset recipes for offline eval: all held-out targets plus train recipes up to max_recipes."""
+    if "id" not in recipes.columns:
+        raise KeyError("recipes must include id column")
+
+    must_include = set(held_out["recipe_id"].astype(int))
+    train_ids = train_interactions["recipe_id"].astype(int).unique()
+    optional_ids = [int(rid) for rid in train_ids if int(rid) not in must_include]
+
+    remaining = max(0, max_recipes - len(must_include))
+    if remaining < len(optional_ids):
+        optional_ids = (
+            pd.Series(optional_ids)
+            .sample(n=remaining, random_state=random_seed, replace=False)
+            .astype(int)
+            .tolist()
+        )
+
+    keep_ids = must_include.union(optional_ids)
+    subset = recipes[recipes["id"].astype(int).isin(keep_ids)].copy()
+    return subset.reset_index(drop=True)
+
+
 def load_interaction_split(
     split: str = "train",
     nrows: int | None = None,

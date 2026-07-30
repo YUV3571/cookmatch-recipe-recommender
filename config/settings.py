@@ -20,3 +20,9 @@ INTERACTIONS_TEST_FILE = "interactions_test.csv"
 # Stage 2 defaults
 CF_FACTORS = 20
 POPULARITY_MIN_PRIOR = 50
+
+# Stage 3: CF shortlist before pantry/time/intent re-rank (keeps eval fast on large catalogs)
+STAGE3_RERANK_POOL_SIZE = 500
+
+# Offline ablation: cap catalog size while keeping all validation targets reachable
+EVAL_RECIPE_CATALOG_SIZE = 30_000

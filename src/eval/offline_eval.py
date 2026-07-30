@@ -219,9 +219,20 @@ def run_ablation(
     k: int = 10,
     min_rating: float = 4.0,
     random_seed: int = 42,
+    stage2: Stage2Recommender | None = None,
+    stage3: Stage3Recommender | None = None,
 ) -> pd.DataFrame:
-    stage2 = Stage2Recommender().fit(recipes, train_interactions)
-    stage3 = Stage3Recommender().fit(recipes, train_interactions)
+    if stage3 is not None:
+        stage2 = stage3.stage2
+    elif stage2 is None:
+        stage2 = Stage2Recommender().fit(recipes, train_interactions)
+
+    if stage3 is None:
+        stage3 = Stage3Recommender().fit(recipes, train_interactions)
+    elif stage3.recipe_meta_:
+        pass
+    else:
+        stage3.fit(recipes, train_interactions)
 
     recipe_meta = {
         int(row["id"]): {
