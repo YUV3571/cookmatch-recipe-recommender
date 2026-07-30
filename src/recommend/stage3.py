@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from config.settings import STAGE3_RERANK_POOL_SIZE
 from config.stage3_weights import STAGE3_WEIGHTS
 from src.models.session_context import SessionContext
 from src.models.user_profile import UserProfile
@@ -36,8 +37,13 @@ class Stage3Recommendation:
 class Stage3Recommender:
     """Stage 2 scores + pantry/time/intent re-ranking."""
 
-    def __init__(self, weights: dict[str, float] | None = None) -> None:
+    def __init__(
+        self,
+        weights: dict[str, float] | None = None,
+        rerank_pool_size: int = STAGE3_RERANK_POOL_SIZE,
+    ) -> None:
         self.weights = weights or dict(STAGE3_WEIGHTS)
+        self.rerank_pool_size = rerank_pool_size
         self.stage2 = Stage2Recommender()
         self.recipe_meta_: dict[int, dict] = {}
 
@@ -92,26 +98,45 @@ class Stage3Recommender:
         if not candidate_ids:
             return []
 
-        cf_scores_raw, source = self._base_scores(profile, user_id, candidate_ids)
+        pool_size = max(top_n, self.rerank_pool_size)
+        if len(candidate_ids) > pool_size:
+            if user_id is not None and self.stage2.cf_model.has_user(user_id):
+                shortlist = [
+                    recipe_id
+                    for recipe_id, _ in self.stage2.cf_model.rank(
+                        user_id, candidate_ids, top_n=pool_size
+                    )
+                ]
+            else:
+                shortlist = [
+                    recipe_id
+                    for recipe_id, _ in self.stage2.popularity_model.rank(
+                        candidate_ids, top_n=pool_size
+                    )
+                ]
+        else:
+            shortlist = candidate_ids
+
+        cf_scores_raw, source = self._base_scores(profile, user_id, shortlist)
         cf_scores = normalize_score_map(cf_scores_raw)
 
         pantry_scores = {
             recipe_id: pantry_match_score(self.recipe_meta_[recipe_id]["ingredients"], context.pantry)
-            for recipe_id in candidate_ids
+            for recipe_id in shortlist
         }
         time_scores = {
             recipe_id: time_budget_score(self.recipe_meta_[recipe_id]["minutes"], context.max_minutes)
-            for recipe_id in candidate_ids
+            for recipe_id in shortlist
         }
         intent_scores = {
             recipe_id: meal_intent_score(self.recipe_meta_[recipe_id]["tags"], context.meal_intent)
-            for recipe_id in candidate_ids
+            for recipe_id in shortlist
         }
 
         weights = self._active_weights(context)
         ranked: list[Stage3Recommendation] = []
 
-        for recipe_id in candidate_ids:
+        for recipe_id in shortlist:
             meta = self.recipe_meta_[recipe_id]
             final_score = (
                 weights.get("cf", 0.0) * cf_scores.get(recipe_id, 0.0)
