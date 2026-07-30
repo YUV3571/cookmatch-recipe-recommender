@@ -93,10 +93,14 @@ class Stage3Recommender:
         context: SessionContext,
         user_id: int | None = None,
         top_n: int = 10,
+        pin_recipe_ids: list[int] | None = None,
     ) -> list[Stage3Recommendation]:
         candidate_ids = self.stage2._candidate_ids(profile)
         if not candidate_ids:
             return []
+
+        candidate_set = set(candidate_ids)
+        pinned = [int(rid) for rid in (pin_recipe_ids or []) if int(rid) in candidate_set]
 
         pool_size = max(top_n, self.rerank_pool_size)
         if len(candidate_ids) > pool_size:
@@ -116,6 +120,13 @@ class Stage3Recommender:
                 ]
         else:
             shortlist = candidate_ids
+
+        if pinned:
+            shortlist_set = set(shortlist)
+            for recipe_id in pinned:
+                if recipe_id not in shortlist_set:
+                    shortlist.append(recipe_id)
+                    shortlist_set.add(recipe_id)
 
         cf_scores_raw, source = self._base_scores(profile, user_id, shortlist)
         cf_scores = normalize_score_map(cf_scores_raw)

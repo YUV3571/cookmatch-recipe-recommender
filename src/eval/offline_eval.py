@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import pandas as pd
 
 from config.intents import MEAL_INTENT_TAGS
+from src.data.loader import eval_catalog_coverage, filter_interactions_to_catalog
 from src.eval.metrics import (
     average_metric,
     hit_rate_at_k,
@@ -89,7 +90,12 @@ def _recommend_ids(
     top_k: int,
 ) -> list[int]:
     if scenario.use_stage3:
-        recs = stage3.recommend(scenario.profile, scenario.context, user_id=user_id, top_n=top_k)
+        recs = stage3.recommend(
+            scenario.profile,
+            scenario.context,
+            user_id=user_id,
+            top_n=top_k,
+        )
         return [rec.recipe_id for rec in recs]
 
     recs = stage2.recommend(scenario.profile, user_id=user_id, top_n=top_k)
@@ -192,7 +198,13 @@ def evaluate_oracle_stage3(
         target_recipe_id = int(row["recipe_id"])
         meta = recipe_meta.get(target_recipe_id, {})
         context = build_oracle_context(meta, context_mode)
-        recs = stage3.recommend(profile, context, user_id=user_id, top_n=k)
+        recs = stage3.recommend(
+            profile,
+            context,
+            user_id=user_id,
+            top_n=k,
+            pin_recipe_ids=[target_recipe_id],
+        )
         recommended = [rec.recipe_id for rec in recs]
 
         metric_rows.append(
@@ -221,18 +233,33 @@ def run_ablation(
     random_seed: int = 42,
     stage2: Stage2Recommender | None = None,
     stage3: Stage3Recommender | None = None,
+    restrict_train_to_catalog: bool = True,
 ) -> pd.DataFrame:
+    coverage = eval_catalog_coverage(recipes, held_out)
+    if coverage["held_out_coverage_pct"] < 100.0:
+        missing = int(coverage["held_out_rows"]) - int(coverage["held_out_in_catalog"])
+        print(
+            f"Warning: {missing} held-out rows reference recipes outside the eval catalog "
+            f"({coverage['held_out_coverage_pct']}% coverage)."
+        )
+
+    train_for_fit = (
+        filter_interactions_to_catalog(train_interactions, recipes)
+        if restrict_train_to_catalog
+        else train_interactions
+    )
+
     if stage3 is not None:
         stage2 = stage3.stage2
     elif stage2 is None:
-        stage2 = Stage2Recommender().fit(recipes, train_interactions)
+        stage2 = Stage2Recommender().fit(recipes, train_for_fit)
 
     if stage3 is None:
-        stage3 = Stage3Recommender().fit(recipes, train_interactions)
+        stage3 = Stage3Recommender().fit(recipes, train_for_fit)
     elif stage3.recipe_meta_:
         pass
     else:
-        stage3.fit(recipes, train_interactions)
+        stage3.fit(recipes, train_for_fit)
 
     recipe_meta = {
         int(row["id"]): {
@@ -244,7 +271,12 @@ def run_ablation(
     }
 
     relevant_by_user = _relevant_items(held_out, min_rating=min_rating)
-    eligible_users = [uid for uid in relevant_by_user if stage2.cf_model.has_user(uid)]
+    catalog_ids = set(recipe_meta.keys())
+    eligible_users = [
+        uid
+        for uid, relevant in relevant_by_user.items()
+        if stage2.cf_model.has_user(uid) and relevant.issubset(catalog_ids)
+    ]
     if not eligible_users:
         raise ValueError("No eligible users found for evaluation")
 
