@@ -50,4 +50,6 @@ def test_run_ablation_returns_expected_scenarios() -> None:
 
     assert len(results) == 7
     assert "stage2_mf_open" in results["scenario"].values
+    mf_hit = float(results.loc[results["scenario"] == "stage2_mf_open", "hit_rate@2"].iloc[0])
+    assert mf_hit > 0.0
     assert float(results.loc[results["scenario"] == "stage3_strict_profile", "constraint_violation_rate"].iloc[0]) == 0.0

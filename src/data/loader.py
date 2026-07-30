@@ -117,6 +117,32 @@ def build_eval_recipe_catalog(
     return subset.reset_index(drop=True)
 
 
+def filter_interactions_to_catalog(
+    interactions: pd.DataFrame,
+    recipes: pd.DataFrame,
+) -> pd.DataFrame:
+    """Keep only interactions whose recipe_id appears in the recipe catalog."""
+    catalog_ids = set(recipes["id"].astype(int))
+    mask = interactions["recipe_id"].astype(int).isin(catalog_ids)
+    return interactions.loc[mask].reset_index(drop=True)
+
+
+def eval_catalog_coverage(
+    recipes: pd.DataFrame,
+    held_out: pd.DataFrame,
+) -> dict[str, float | int]:
+    """Report how many held-out targets exist in the recipe catalog."""
+    catalog_ids = set(recipes["id"].astype(int))
+    held_out_ids = held_out["recipe_id"].astype(int)
+    in_catalog = held_out_ids.isin(catalog_ids)
+    total = len(held_out_ids)
+    return {
+        "held_out_rows": total,
+        "held_out_in_catalog": int(in_catalog.sum()),
+        "held_out_coverage_pct": round(100.0 * float(in_catalog.mean()), 2) if total else 0.0,
+    }
+
+
 def load_interaction_split(
     split: str = "train",
     nrows: int | None = None,
