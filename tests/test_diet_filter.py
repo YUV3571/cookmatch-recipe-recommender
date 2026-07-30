@@ -74,6 +74,18 @@ def test_summarize_diet_filter() -> None:
     }
 
 
+def test_vegan_blocks_kielbasa() -> None:
+    # Regression: kielbasa was leaking through vegan filter before explicit keyword.
+    ingredients = ["kielbasa", "tomatoes", "white beans", "garlic"]
+    assert is_diet_compatible(ingredients, "vegan") is False
+    assert "kielbasa" in find_diet_hits(ingredients, "vegan")
+
+
+def test_vegan_blocks_bratwurst() -> None:
+    ingredients = ["bratwurst", "sauerkraut", "mustard"]
+    assert is_diet_compatible(ingredients, "vegan") is False
+
+
 def test_unsupported_diet_raises() -> None:
     with pytest.raises(ValueError):
         is_diet_compatible(["rice"], "pescatarian")

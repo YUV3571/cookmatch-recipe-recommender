@@ -95,10 +95,20 @@ class Stage3Recommender:
         top_n: int = 10,
         pin_recipe_ids: list[int] | None = None,
         weights_override: dict[str, float] | None = None,
+        mode: str | None = None,
     ) -> list[Stage3Recommendation]:
         candidate_ids = self.stage2._candidate_ids(profile)
         if not candidate_ids:
             return []
+
+        # Hard time cap for time-mode panel only.
+        if mode == "time" and context.max_minutes and context.max_minutes > 0:
+            candidate_ids = [
+                rid for rid in candidate_ids
+                if self.recipe_meta_.get(rid, {}).get("minutes", 0) <= context.max_minutes
+            ]
+            if not candidate_ids:
+                return []
 
         candidate_set = set(candidate_ids)
         pinned = [int(rid) for rid in (pin_recipe_ids or []) if int(rid) in candidate_set]
