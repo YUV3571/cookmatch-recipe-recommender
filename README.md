@@ -17,13 +17,24 @@ pip install -r requirements.txt
 python scripts/check_setup.py
 ```
 
-## Google Colab
+## Google Colab + GitHub
 
-Open [`notebooks/03_colab_full_run.ipynb`](notebooks/03_colab_full_run.ipynb) in Colab.
+Colab loads **only the notebook file** from GitHub — not the full repo. Always run the **Setup cell** first.
 
-1. Clone this repo
-2. Set `KAGGLE_API_TOKEN` in Colab (Kaggle → Settings → API → Create New Token)
-3. Run all cells — dataset downloads via `kagglehub` (not committed to git)
+### Open in Colab (one click)
+
+| Notebook | Link |
+|----------|------|
+| **Setup (run first)** | [00_colab_github_setup.ipynb](https://colab.research.google.com/github/YUV3571/cookmatch-recipe-recommender/blob/main/notebooks/00_colab_github_setup.ipynb) |
+| **Full pipeline run** | [03_colab_full_run.ipynb](https://colab.research.google.com/github/YUV3571/cookmatch-recipe-recommender/blob/main/notebooks/03_colab_full_run.ipynb) |
+
+### Steps
+
+1. Open **00** or run **cell 1** of **03** — clones `YUV3571/cookmatch-recipe-recommender` into `/content/`
+2. Set `KAGGLE_API_TOKEN` (Kaggle → Settings → API → Create New Token)
+3. Run remaining cells — dataset downloads via `kagglehub` (not in git)
+
+If `git clone` fails in Colab, setup auto-falls back to GitHub zip download.
 
 ## Kaggle dataset
 
