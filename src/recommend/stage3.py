@@ -94,6 +94,7 @@ class Stage3Recommender:
         user_id: int | None = None,
         top_n: int = 10,
         pin_recipe_ids: list[int] | None = None,
+        weights_override: dict[str, float] | None = None,
     ) -> list[Stage3Recommendation]:
         candidate_ids = self.stage2._candidate_ids(profile)
         if not candidate_ids:
@@ -122,11 +123,7 @@ class Stage3Recommender:
             shortlist = candidate_ids
 
         if pinned:
-            shortlist_set = set(shortlist)
-            for recipe_id in pinned:
-                if recipe_id not in shortlist_set:
-                    shortlist.append(recipe_id)
-                    shortlist_set.add(recipe_id)
+            shortlist = pinned + [recipe_id for recipe_id in shortlist if recipe_id not in set(pinned)]
 
         cf_scores_raw, source = self._base_scores(profile, user_id, shortlist)
         cf_scores = normalize_score_map(cf_scores_raw)
@@ -144,7 +141,14 @@ class Stage3Recommender:
             for recipe_id in shortlist
         }
 
-        weights = self._active_weights(context)
+        weights = (
+            {key: value for key, value in weights_override.items() if value > 0}
+            if weights_override
+            else self._active_weights(context)
+        )
+        if weights_override:
+            total = sum(weights.values())
+            weights = {key: value / total for key, value in weights.items()}
         ranked: list[Stage3Recommendation] = []
 
         for recipe_id in shortlist:
