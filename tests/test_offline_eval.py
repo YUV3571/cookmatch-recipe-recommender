@@ -48,9 +48,17 @@ def test_run_ablation_returns_expected_scenarios() -> None:
         k=2,
     )
 
-    assert len(results) == 8  # +1 for stage2_mf_top500
+    assert len(results) == 9  # +1 mf_top500, +1 mf_rating_prediction
     assert "stage2_mf_open" in results["scenario"].values
     assert "stage2_mf_top500" in results["scenario"].values
+    assert "mf_rating_prediction" in results["scenario"].values
     mf_hit = float(results.loc[results["scenario"] == "stage2_mf_open", "hit_rate@2"].iloc[0])
     assert mf_hit > 0.0
     assert float(results.loc[results["scenario"] == "stage3_strict_profile", "constraint_violation_rate"].iloc[0]) == 0.0
+    # diversity and coverage columns exist
+    assert "diversity@10" in results.columns
+    assert "catalog_coverage" in results.columns
+    # rmse/mae present for rating prediction row
+    rmse_row = results.loc[results["scenario"] == "mf_rating_prediction"]
+    assert float(rmse_row["rmse"].iloc[0]) > 0.0
+    assert float(rmse_row["mae"].iloc[0]) > 0.0
