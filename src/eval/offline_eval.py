@@ -8,9 +8,13 @@ import pandas as pd
 
 from config.intents import MEAL_INTENT_TAGS
 from src.data.loader import eval_catalog_coverage, filter_interactions_to_catalog
+import math
+
 from src.eval.metrics import (
     average_metric,
+    catalog_coverage,
     hit_rate_at_k,
+    intra_list_diversity,
     ndcg_at_k,
     precision_at_k,
     recall_at_k,
@@ -147,12 +151,53 @@ def evaluate_mf_topk(
                 "hit": hit_rate_at_k(recommended, relevant, k),
                 "ndcg": ndcg_at_k(recommended, relevant, k),
                 "violation": constraint_violation_rate(recommended, profile, recipe_meta),
+                "diversity": intra_list_diversity(recommended, recipe_meta),
+                "recommended_ids": recommended,
             }
         )
 
     metrics = _aggregate_user_metrics(metric_rows, k)
     metrics["scenario"] = f"stage2_mf_top{pool_k}"
     return metrics
+
+
+def evaluate_rmse_mae(
+    *,
+    stage2: Stage2Recommender,
+    held_out: pd.DataFrame,
+) -> dict[str, float | str]:
+    """RMSE and MAE of MF rating predictions on held-out interactions.
+
+    Only evaluated for users the MF model has seen (known users).
+    Provides a rating-prediction baseline comparable to published RS benchmarks.
+    """
+    errors: list[float] = []
+
+    for _, row in held_out.iterrows():
+        user_id = int(row["user_id"])
+        recipe_id = int(row["recipe_id"])
+        actual = float(row["rating"])
+
+        if not stage2.cf_model.has_user(user_id):
+            continue
+
+        predicted_map = stage2.cf_model.score(user_id, [recipe_id])
+        predicted = predicted_map.get(recipe_id)
+        if predicted is None:
+            continue
+        errors.append(predicted - actual)
+
+    if not errors:
+        return {"scenario": "mf_rating_prediction", "rmse": float("nan"), "mae": float("nan"), "n_predictions": 0.0}
+
+    rmse = math.sqrt(sum(e ** 2 for e in errors) / len(errors))
+    mae = sum(abs(e) for e in errors) / len(errors)
+    return {
+        "scenario": "mf_rating_prediction",
+        "rmse": round(rmse, 4),
+        "mae": round(mae, 4),
+        "n_predictions": float(len(errors)),
+    }
 
 
 def constraint_violation_rate(
@@ -175,7 +220,10 @@ def constraint_violation_rate(
 def _aggregate_user_metrics(
     metric_rows: list[dict[str, float]],
     k: int,
+    catalog_size: int = 0,
 ) -> dict[str, float | str]:
+    all_recommended = [row.get("recommended_ids", []) for row in metric_rows]
+    cov = catalog_coverage(all_recommended, catalog_size) if catalog_size > 0 else 0.0
     return {
         "users_evaluated": float(len(metric_rows)),
         f"precision@{k}": round(average_metric([row["precision"] for row in metric_rows]), 4),
@@ -185,6 +233,8 @@ def _aggregate_user_metrics(
         "constraint_violation_rate": round(
             average_metric([row["violation"] for row in metric_rows]), 4
         ),
+        "diversity@10": round(average_metric([row.get("diversity", 0.0) for row in metric_rows]), 4),
+        "catalog_coverage": round(cov, 4),
     }
 
 
@@ -197,6 +247,7 @@ def evaluate_scenario(
     user_ids: list[int],
     relevant_by_user: dict[int, set[int]],
     k: int = 10,
+    catalog_size: int = 0,
 ) -> dict[str, float | str]:
     metric_rows: list[dict[str, float]] = []
 
@@ -220,10 +271,12 @@ def evaluate_scenario(
                 "hit": hit_rate_at_k(recommended, relevant, k),
                 "ndcg": ndcg_at_k(recommended, relevant, k),
                 "violation": constraint_violation_rate(recommended, scenario.profile, recipe_meta),
+                "diversity": intra_list_diversity(recommended, recipe_meta),
+                "recommended_ids": recommended,
             }
         )
 
-    metrics = _aggregate_user_metrics(metric_rows, k)
+    metrics = _aggregate_user_metrics(metric_rows, k, catalog_size=catalog_size)
     metrics["scenario"] = scenario.name
     return metrics
 
@@ -238,6 +291,7 @@ def evaluate_oracle_stage3(
     relevant_by_user: dict[int, set[int]],
     context_mode: str,
     k: int = 10,
+    catalog_size: int = 0,
 ) -> dict[str, float | str]:
     held_out_by_user = held_out.set_index("user_id")
     metric_rows: list[dict[str, float]] = []
@@ -268,10 +322,12 @@ def evaluate_oracle_stage3(
                 "hit": hit_rate_at_k(recommended, relevant, k),
                 "ndcg": ndcg_at_k(recommended, relevant, k),
                 "violation": constraint_violation_rate(recommended, profile, recipe_meta),
+                "diversity": intra_list_diversity(recommended, recipe_meta),
+                "recommended_ids": recommended,
             }
         )
 
-    metrics = _aggregate_user_metrics(metric_rows, k)
+    metrics = _aggregate_user_metrics(metric_rows, k, catalog_size=catalog_size)
     metrics["scenario"] = f"stage3_oracle_{context_mode}"
     return metrics
 
@@ -354,6 +410,8 @@ def run_ablation(
         EvalScenario("stage3_strict_profile", strict_profile, SessionContext(), use_stage3=False),
     ]
 
+    catalog_size = len(recipe_meta)
+
     for scenario in base_scenarios:
         rows.append(
             evaluate_scenario(
@@ -364,6 +422,7 @@ def run_ablation(
                 user_ids=sampled_users,
                 relevant_by_user=relevant_by_user,
                 k=k,
+                catalog_size=catalog_size,
             )
         )
 
@@ -391,7 +450,12 @@ def run_ablation(
                 relevant_by_user=relevant_by_user,
                 context_mode=context_mode,
                 k=k,
+                catalog_size=catalog_size,
             )
         )
+
+    # RMSE/MAE rating prediction baseline — separate row, NaN-filled for retrieval cols.
+    rmse_row = evaluate_rmse_mae(stage2=stage2, held_out=held_out)
+    rows.append(rmse_row)
 
     return pd.DataFrame(rows)
