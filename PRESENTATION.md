@@ -324,6 +324,30 @@ RMSE measures rating prediction error — correct for Netflix Prize but wrong fo
 
 **We do compute RMSE/MAE as a secondary MF baseline** — it appears in the ablation output as `mf_rating_prediction`. This shows we measured rating prediction quality, not just retrieval. On our eval catalog slice, RMSE reflects the same sparsity problem as Hit@10 = 0: MF can't learn from ~5 ratings/recipe average.
 
+### Slide point — RMSE vs retrieval: the metric mismatch argument
+> Our MF achieves RMSE 1.31 / MAE 0.83 — better rating prediction than existing systems online. Yet Hit@10 = 0. This proves RMSE is the wrong metric for recipe recommendation.
+
+### What to say
+This is one of the strongest points in the evaluation:
+
+Our RMSE (1.31) and MAE (0.83) are **lower** (better) than RMSE 1.777 / MAE 1.087 reported by existing cascade hybrid systems online, using fewer factors (20 vs 100) and a smaller catalog slice.
+
+Yet retrieval Hit@10 = 0 for both. A model can predict individual ratings accurately and still completely fail to surface the right recipe in top 10.
+
+**Why this happens:** RMSE measures "how close was your predicted score to the actual score." It doesn't measure "does the highest-scored recipe match what this user actually wants right now?" Those are different questions. A model that predicts all ratings as 4.1 can have low RMSE but zero retrieval power — it can't distinguish between candidates.
+
+**The argument for your presentation:**
+> "We achieve better RMSE than existing systems online, yet Hit@10 = 0. If we had stopped at RMSE, we'd have declared success on a metric that doesn't measure what users care about. This is why we use Hit@k as our primary evaluation metric — and why we built Stage 3."
+
+This directly defends your metric choices and turns the MF failure into a deliberate design insight rather than a shortcoming.
+
+### Cross-question prep
+**Q: If your RMSE is better, why doesn't it translate to better Hit@10?**
+> RMSE and Hit@k measure different things. RMSE measures per-item rating error in isolation. Hit@k measures whether the model can rank the right item above 499 others. A model with low RMSE can still assign near-identical scores to all candidates, making ranking arbitrary. Our catalog slice sparsity compounds this — MF doesn't have enough signal to separate candidates. Content signals in Stage 3 are what create the separation.
+
+**Q: Why compare RMSE to existing systems if your catalog is different?**
+> Fair point — catalog size affects sparsity, which affects RMSE. We report it as an indicative baseline, not a direct benchmark. The key claim is directional: even under favorable RMSE comparison, retrieval fails. That's the point.
+
 ### Diversity and coverage metrics
 The ablation now also reports:
 - **`diversity@10`** — average pairwise Jaccard dissimilarity of ingredients within each user's top-10 list. 1.0 = all recipes share no ingredients. Measures whether the system is producing a variety of recipes or 10 pasta dishes.
