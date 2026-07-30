@@ -109,6 +109,52 @@ def _recommend_ids(
     return [rec.recipe_id for rec in recs]
 
 
+def evaluate_mf_topk(
+    *,
+    stage2: Stage2Recommender,
+    profile: UserProfile,
+    recipe_meta: dict[int, dict],
+    user_ids: list[int],
+    relevant_by_user: dict[int, set[int]],
+    pool_k: int = 500,
+    k: int = 10,
+) -> dict[str, float | str]:
+    """Hit@k restricted to MF's own top-pool_k candidates.
+
+    Shows MF learns signal even when global Hit@10 is near-zero at catalog scale.
+    """
+    metric_rows: list[dict[str, float]] = []
+
+    for user_id in user_ids:
+        relevant = relevant_by_user.get(user_id, set())
+        if not relevant:
+            continue
+
+        candidate_ids = stage2._candidate_ids(profile)
+        if not candidate_ids:
+            continue
+
+        if stage2.cf_model.has_user(user_id):
+            top_pool = [rid for rid, _ in stage2.cf_model.rank(user_id, candidate_ids, top_n=pool_k)]
+        else:
+            top_pool = [rid for rid, _ in stage2.popularity_model.rank(candidate_ids, top_n=pool_k)]
+
+        recommended = top_pool[:k]
+        metric_rows.append(
+            {
+                "precision": precision_at_k(recommended, relevant, k),
+                "recall": recall_at_k(recommended, relevant, k),
+                "hit": hit_rate_at_k(recommended, relevant, k),
+                "ndcg": ndcg_at_k(recommended, relevant, k),
+                "violation": constraint_violation_rate(recommended, profile, recipe_meta),
+            }
+        )
+
+    metrics = _aggregate_user_metrics(metric_rows, k)
+    metrics["scenario"] = f"stage2_mf_top{pool_k}"
+    return metrics
+
+
 def constraint_violation_rate(
     recommended_ids: list[int],
     profile: UserProfile,
@@ -320,6 +366,19 @@ def run_ablation(
                 k=k,
             )
         )
+
+    # MF restricted to its own top-500 pool — shows MF learns signal at catalog scale.
+    rows.append(
+        evaluate_mf_topk(
+            stage2=stage2,
+            profile=open_profile,
+            recipe_meta=recipe_meta,
+            user_ids=sampled_users,
+            relevant_by_user=relevant_by_user,
+            pool_k=500,
+            k=k,
+        )
+    )
 
     for context_mode in ("pantry", "time", "intent", "full"):
         rows.append(
