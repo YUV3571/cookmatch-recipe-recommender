@@ -2,6 +2,12 @@
 
 Safety-constrained hybrid recipe recommender for a university RS project.
 
+## Architecture graph
+
+Built with [graphify](https://github.com/safishamsi/graphify) — open [`graphify-out/graph.html`](graphify-out/graph.html) in a browser for an interactive map (301 nodes, 11 communities). SVG for slides: [`graphify-out/graph.svg`](graphify-out/graph.svg).
+
+Full project history, issues, and next steps: **[PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)**.
+
 ## Pipeline
 
 1. **Stage 1** — hard profile filter (diet + allergens)

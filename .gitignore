@@ -11,3 +11,9 @@ venv/
 *.pkl
 *.csv
 kaggle.json
+
+# graphify working files (keep published outputs)
+graphify-out/cache/
+graphify-out/.graphify_*
+graphify-out/.graphify_root
+graphify-out/manifest.json
