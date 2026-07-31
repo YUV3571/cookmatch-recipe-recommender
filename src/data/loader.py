@@ -143,6 +143,47 @@ def eval_catalog_coverage(
     }
 
 
+def clean_recipes(
+    df: pd.DataFrame,
+    max_minutes: int = 1440,
+) -> pd.DataFrame:
+    """Remove or fix recipe rows that corrupt ranking or time scoring.
+
+    Drops:
+    - null name (1 known row in Food.com)
+    - minutes == 0 (breaks time-ratio scoring)
+    - minutes > max_minutes (default 24 h — 43200-min "recipes" are data noise)
+    Returns a reset-index copy with a 'cleaned' provenance column stripped.
+    """
+    out = df.copy()
+    before = len(out)
+    out = out[out["name"].notna()]
+    out = out[out["minutes"] > 0]
+    out = out[out["minutes"] <= max_minutes]
+    removed = before - len(out)
+    if removed:
+        print(f"clean_recipes: removed {removed} rows ({before} → {len(out)})")
+    return out.reset_index(drop=True)
+
+
+def clean_interactions(
+    df: pd.DataFrame,
+) -> pd.DataFrame:
+    """Remove interactions that corrupt collaborative filtering.
+
+    Drops rating == 0: in Food.com, 0 means 'cooked but did not rate' —
+    not a true 0/5 score. Including them flattens SVD factors toward zero
+    and degrades Hit@k.
+    """
+    out = df.copy()
+    before = len(out)
+    out = out[out["rating"] > 0]
+    removed = before - len(out)
+    if removed:
+        print(f"clean_interactions: removed {removed} zero-rating rows ({before} → {len(out)})")
+    return out.reset_index(drop=True)
+
+
 def load_interaction_split(
     split: str = "train",
     nrows: int | None = None,
