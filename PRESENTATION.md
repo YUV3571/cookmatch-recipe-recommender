@@ -38,7 +38,7 @@ Standard CF (collaborative filtering) ignores all of this. It optimises for past
 ## 2. The Dataset — Why Food.com
 
 ### Slide point
-> Food.com: 231,000 recipes, 699,000 train interactions, 7,023 validation hold-outs. Chosen because it has ingredients, cook time, and meal tags — not just ratings. That structured metadata is what makes Stage 3 possible.
+> Food.com: 231,000 recipes, 699,000 train interactions, 7,023 validation hold-outs. Chosen because it has ingredients, cook time, and meal tags — not just ratings. That structured metadata is what makes Stage 3 possible. Raw data cleaned before any modelling.
 
 ### What to say
 Food.com was published alongside the 2019 paper _Generating Personalized Recipes from Historical User Preferences_ (Majumder et al., ACL 2019). It's a gold-standard public RS benchmark used in academic papers, so our framing is directly comparable.
@@ -49,6 +49,28 @@ Food.com was published alongside the 2019 paper _Generating Personalized Recipes
 
 **Eval catalog:** We don't evaluate on all 231k recipes — that would make Hit@10 astronomically hard (10/231,000 = 0.004% base rate). We build a 30k–60k eval catalog: all 7,023 validation targets + random training recipes. Coverage = 100%. Standard practice in offline RS evaluation.
 
+### Data preprocessing and cleaning
+
+Before any model sees the data, two cleaning passes run (`clean_recipes` and `clean_interactions` in `src/data/loader.py`):
+
+**Recipe cleaning (`clean_recipes`):**
+| Issue | Fix | Why it matters |
+|-------|-----|----------------|
+| `minutes == 0` | Dropped | Time-ratio score divides by minutes — zero causes divide-by-zero in soft time penalty |
+| `minutes > 1440` (> 24h) | Dropped | Outliers like 43,200-min entries (30 days) skew time-score distributions and pollute "quick meal" queries |
+| `name == null` | Dropped | Causes downstream string operation failures; 1 known row in Food.com |
+
+**Interaction cleaning (`clean_interactions`):**
+| Issue | Fix | Why it matters |
+|-------|-----|----------------|
+| `rating == 0` | Dropped (~3% of rows) | In Food.com semantics, 0 = "cooked it but didn't leave a rating" — **not** a 0/5 score. Treating it as 0 poisons SVD: factors are pulled toward zero for those (user, recipe) pairs, degrading Hit@k |
+
+**Why this matters for MF quality:** The rating=0 issue is Food.com-specific and not obvious from the dataset schema. Including those rows as negative signal flattens SVD factors. We discovered this by examining the rating distribution (613 out of 20,000 train rows = 0) and cross-referencing Food.com documentation. Removing them is a deliberate modelling choice, not a data quality accident.
+
+**Validation split not cleaned:** `validation` rows with rating=0 are kept as-is. In ablation, `min_rating=4.0` means those rows simply have no relevant items — they don't corrupt anything. Cleaning only the training signal is the correct approach.
+
+8 unit tests in `test_data_cleaning.py` verify all cleaning paths.
+
 ### Cross-question prep
 **Q: Why not use the test set?**
 > Test set is for final model selection. Using validation for ablation keeps test unseen — avoids overfitting evaluation methodology to the test distribution.
@@ -58,6 +80,12 @@ Food.com was published alongside the 2019 paper _Generating Personalized Recipes
 
 **Q: Why not a cooking-specific dataset like Recipe1M?**
 > Recipe1M doesn't have user-recipe interaction ratings. Without interactions, CF can't be trained at all. Food.com is the only large public dataset combining ratings + structured recipe metadata.
+
+**Q: How did you know rating=0 means "unrated" and not "bad"?**
+> Food.com's review system shows 1–5 stars for ratings; 0 only appears in the exported CSV for users who submitted a review text without clicking a star. We confirmed this by looking at the distribution — 0-rating rows have the same review text patterns as 1–5 rows, not the absence-of-data pattern you'd expect from a true bad rating.
+
+**Q: Why drop minutes > 1440 — what if a legitimate recipe takes 25 hours?**
+> Legitimate slow-cook recipes (e.g. 30-hour broth) exist but are edge cases. The outliers we found were data entry errors (43,200 min = 30 days). Cap at 1440 is configurable — `clean_recipes(df, max_minutes=N)`. For a production system, a higher cap or separate "multi-day project" category would be appropriate.
 
 ---
 
@@ -113,7 +141,7 @@ Three reasons, each maps to a design requirement:
 ## 4. Stage 1 — Hard Safety Filter
 
 ### Slide point
-> Keyword-based hard filter over parsed ingredient lists. Eliminates recipes with diet or allergen violations before any ranking. Zero tolerance — one matching keyword = blocked. 61 unit tests validate every filtering path.
+> Keyword-based hard filter over parsed ingredient lists. Eliminates recipes with diet or allergen violations before any ranking. Zero tolerance — one matching keyword = blocked. 69 unit tests validate every filtering path.
 
 ### What to say
 **How it works:** Every recipe's ingredient list is parsed into normalised tokens (quantities and measurements stripped). We check each token against keyword lists:
@@ -215,11 +243,12 @@ Query context (pantry, time, goal) changes every session. You can't bake it into
 ## 7. The Tests — Why 61 Unit Tests Matter
 
 ### Slide point
-> 61 unit tests covering every filter path, every edge case, and every pipeline component. Tests are the proof of correctness before evaluation — if a filter silently fails, the ablation numbers are meaningless.
+> 69 unit tests covering every filter path, data cleaning, edge cases, and every pipeline component. Tests are the proof of correctness before evaluation — if a filter silently fails, the ablation numbers are meaningless.
 
 ### What to say
 Tests aren't just code hygiene. For a safety-constrained system they're a necessity:
 
+- **Data cleaning tests (8 new):** `clean_recipes` drops null names, zero minutes, >1440-min outliers. `clean_interactions` drops rating=0 rows. Edge cases: no-op on already-clean data, reset index. These run before any model — if cleaning silently drops too much, training breaks in obvious ways.
 - **Stage 1 tests (diet + allergen):** Every blocked keyword tested in isolation. Edge cases: empty ingredient list, unknown diet raises an error, omnivore allows everything. Regression tests added after we found kielbasa leaking through (vegan profile, real recipe — now blocked and tested permanently).
 - **Stage 2 tests (CF + popularity):** MF trains correctly on small toy data, scores known users, falls back to popularity for unknown users. Popularity Bayesian smoothing tested against hand-calculated values.
 - **Stage 3 tests:** Re-ranking weights normalise to 1.0, scores are bounded [0,1], explanations are human-readable strings, oracle context builds correctly from recipe metadata.
@@ -258,6 +287,8 @@ Before integrating all signals into combined mode, we evaluated each content sig
 - Found 375-min recipe in "30 min" panel → added hard time cap for time-mode
 - Found kielbasa in vegan recommendations → added explicit keyword + regression test
 - Ablation taking 50+ min → redesigned to use 30k eval catalog + 500-candidate rerank pool → ~4 min
+- Found rating=0 rows in train (~3%) are "cooked but unrated" not "bad" → added `clean_interactions` to strip them before SVD fit
+- Found minutes outliers (up to 43,200) corrupting time scoring → added `clean_recipes` with 1440-min cap
 
 ### Cross-question prep
 **Q: How did you decide on 45/30/15/10 weights?**
@@ -381,7 +412,7 @@ Examiners respect naming your own limitations before being asked.
 | # | Slide | Time |
 |---|-------|------|
 | 1 | Title + problem statement | 1 min |
-| 2 | Dataset — Food.com, why we chose it | 1.5 min |
+| 2 | Dataset — Food.com, why we chose it, preprocessing choices | 2 min |
 | 3 | Architecture diagram — 3-stage cascade, why not unified model | 2 min |
 | 4 | Stage 1 — keyword filter, funnel stats, 61 tests | 2 min |
 | 5 | Stage 2 — MF-SVD, cold-start, why it fails | 2 min |
@@ -407,5 +438,5 @@ Memorise these:
 - **Why cascade:** "Safety must be a hard guarantee. A unified model learns a soft trade-off — unacceptable for allergens."
 - **Constraint violation = 0:** "Stage 1 is a hard filter. Unsafe recipes never enter the ranking pipeline. Structurally impossible to violate."
 - **Precision=0.10 at Hit=1.00:** "One relevant item per user. Find it in top-10 = precision 1/10. Mathematically correct."
-- **61 tests:** "Every filter path, every edge case. Regression test added for kielbasa after a real demo failure."
+- **69 tests:** "Every filter path, data cleaning, every edge case. Regression test added for kielbasa after a real demo failure. 8 new tests cover preprocessing — null names, zero-minute recipes, rating=0 stripping."
 - **Why Food.com:** "Only large public dataset with ratings + ingredient lists + cook time + meal tags. The metadata is what makes Stage 3 possible."
