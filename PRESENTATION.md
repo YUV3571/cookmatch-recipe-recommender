@@ -87,6 +87,9 @@ Before any model sees the data, two cleaning passes run (`clean_recipes` and `cl
 **Q: Why drop minutes > 1440 — what if a legitimate recipe takes 25 hours?**
 > Legitimate slow-cook recipes (e.g. 30-hour broth) exist but are edge cases. The outliers we found were data entry errors (43,200 min = 30 days). Cap at 1440 is configurable — `clean_recipes(df, max_minutes=N)`. For a production system, a higher cap or separate "multi-day project" category would be appropriate.
 
+**Q: Did you check other columns for quality issues?**
+> Yes — `ingredients` and `tags` are already normalised on load by `_normalize_recipe_frame` (string-to-list parse, lowercase). `user_id` and `recipe_id` have zero nulls and zero duplicates confirmed. `steps` is not in the signal path at all. Only `minutes`, `name`, and `rating` had actionable issues that affected model quality or scoring.
+
 ---
 
 ## 3. Architecture — Why a Cascade and Not a Single Model
