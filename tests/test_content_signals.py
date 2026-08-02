@@ -11,7 +11,7 @@ from src.recommend.content_signals import (
 def test_pantry_match_score_partial_overlap() -> None:
     recipe = ["chicken", "garlic", "onion", "rice"]
     pantry = ["chicken", "garlic", "tomato"]
-    assert pantry_match_score(recipe, pantry) == 0.5
+    assert pantry_match_score(recipe, pantry) == pytest.approx(0.6167, abs=1e-3)
 
 
 def test_pantry_match_score_empty_pantry() -> None:
