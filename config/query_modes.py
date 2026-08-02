@@ -20,8 +20,8 @@ QUERY_MODES: dict[str, dict] = {
         "description": "Recipes matching my meal goal.",
     },
     "combined": {
-        "weights": None,
-        "hard_time_cap": False,
+        "weights": {"cf": 0.25, "pantry": 0.45, "time": 0.20, "intent": 0.10},
+        "hard_time_cap": True,
         "label": "Combined",
         "description": "Personalized blend of all signals.",
     },

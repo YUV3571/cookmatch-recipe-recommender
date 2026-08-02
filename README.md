@@ -21,6 +21,15 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/check_setup.py
+streamlit run app.py
+```
+
+### Streamlit Web Demo
+
+Launch the interactive web UI:
+
+```bash
+streamlit run app.py
 ```
 
 ## Google Colab + GitHub

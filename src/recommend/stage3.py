@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pandas as pd
 
@@ -32,6 +32,7 @@ class Stage3Recommendation:
     intent_score: float
     minutes: int | None
     explanation: str
+    ingredients: list[str] = field(default_factory=list)
 
 
 class Stage3Recommender:
@@ -101,8 +102,13 @@ class Stage3Recommender:
         if not candidate_ids:
             return []
 
-        # Hard time cap for time-mode panel only.
-        if mode == "time" and context.max_minutes and context.max_minutes > 0:
+        # Hard time cap when enabled in query mode config or for time/combined modes.
+        from config.query_modes import QUERY_MODES
+        should_cap_time = (
+            mode in ("time", "combined") or 
+            QUERY_MODES.get(mode, {}).get("hard_time_cap", False)
+        )
+        if should_cap_time and context.max_minutes and context.max_minutes > 0:
             candidate_ids = [
                 rid for rid in candidate_ids
                 if self.recipe_meta_.get(rid, {}).get("minutes", 0) <= context.max_minutes
@@ -188,6 +194,7 @@ class Stage3Recommender:
                         minutes=meta["minutes"],
                         context=context,
                     ),
+                    ingredients=list(meta.get("ingredients", [])),
                 )
             )
 

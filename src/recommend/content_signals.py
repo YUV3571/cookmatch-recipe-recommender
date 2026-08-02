@@ -6,12 +6,34 @@ from config.intents import MEAL_INTENT_TAGS
 from src.filter.ingredient_parser import parse_ingredient, parse_ingredients
 
 
+def _stem_word(word: str) -> str:
+    w = word.lower().strip()
+    if w.endswith("tomatoes"):
+        return w[:-2]
+    if w.endswith("potatoes"):
+        return w[:-2]
+    if w.endswith("ies") and len(w) > 4:
+        return w[:-3] + "y"
+    if w.endswith("es") and len(w) > 4 and not w.endswith("ches") and not w.endswith("shes"):
+        return w[:-2]
+    if w.endswith("s") and len(w) > 3 and not w.endswith("ss"):
+        return w[:-1]
+    return w
+
+
+def _stem_text(text: str) -> str:
+    tokens = text.lower().split()
+    return " ".join([_stem_word(tok) for tok in tokens])
+
+
 def _pantry_item_matches_recipe_ingredient(pantry_item: str, recipe_ingredient: str) -> bool:
-    return pantry_item in recipe_ingredient or recipe_ingredient in pantry_item
+    p_stem = _stem_text(pantry_item)
+    r_stem = _stem_text(recipe_ingredient)
+    return p_stem in r_stem or r_stem in p_stem
 
 
 def pantry_match_score(recipe_ingredients: list[str], pantry: list[str]) -> float:
-    """Fraction of recipe ingredients covered by pantry items."""
+    """Hybrid pantry score: 70% user pantry utilization + 30% recipe coverage."""
     if not pantry:
         return 0.0
 
@@ -20,12 +42,24 @@ def pantry_match_score(recipe_ingredients: list[str], pantry: list[str]) -> floa
     if not parsed_recipe or not parsed_pantry:
         return 0.0
 
-    matched = 0
-    for recipe_ingredient in parsed_recipe:
-        if any(_pantry_item_matches_recipe_ingredient(item, recipe_ingredient) for item in parsed_pantry):
-            matched += 1
+    recipe_matched_count = 0
+    pantry_used_indices = set()
 
-    return matched / len(parsed_recipe)
+    for r_ingr in parsed_recipe:
+        r_stem = _stem_text(r_ingr)
+        r_hit = False
+        for p_idx, p_ingr in enumerate(parsed_pantry):
+            p_stem = _stem_text(p_ingr)
+            if p_stem in r_stem or r_stem in p_stem:
+                pantry_used_indices.add(p_idx)
+                r_hit = True
+        if r_hit:
+            recipe_matched_count += 1
+
+    pantry_coverage = len(pantry_used_indices) / len(parsed_pantry)
+    recipe_coverage = recipe_matched_count / len(parsed_recipe)
+
+    return 0.70 * pantry_coverage + 0.30 * recipe_coverage
 
 
 def time_budget_score(minutes: int, max_minutes: int | None) -> float:
